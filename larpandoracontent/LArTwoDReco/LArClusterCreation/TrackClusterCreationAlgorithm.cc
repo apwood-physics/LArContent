@@ -9,6 +9,7 @@
 #include "Pandora/AlgorithmHeaders.h"
 
 #include "larpandoracontent/LArHelpers/LArClusterHelper.h"
+#include "larpandoracontent/LArObjects/LArCaloHit.h"
 
 #include "larpandoracontent/LArTwoDReco/LArClusterCreation/TrackClusterCreationAlgorithm.h"
 
@@ -22,7 +23,8 @@ TrackClusterCreationAlgorithm::TrackClusterCreationAlgorithm() :
     m_maxGapLayers(2),
     m_maxCaloHitSeparationSquared(1.3f * 1.3f),
     m_minCaloHitSeparationSquared(0.4f * 0.4f),
-    m_closeSeparationSquared(0.9f * 0.9f)
+    m_closeSeparationSquared(0.9f * 0.9f),
+    m_checkInterTPCVolumeAssociations(false)
 {
 }
 
@@ -49,6 +51,21 @@ StatusCode TrackClusterCreationAlgorithm::Run()
         this->CreateClusters(rejectedCaloHitList, hitJoinMap, hitToClusterMap);
 
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, this->AddFilteredCaloHits(selectedCaloHitList, rejectedCaloHitList, hitToClusterMap));
+
+
+    CaloHitList skipped;
+    for (const CaloHit *const pCaloHit : *pCaloHitList)
+    {
+        if (hitToClusterMap.find(pCaloHit) == hitToClusterMap.end())
+            skipped.emplace_back(pCaloHit);
+    }
+    OrderedCaloHitList orderedSkipped;
+    orderedSkipped.Add(skipped);
+    this->MakePrimaryAssociations(orderedSkipped, forwardHitAssociationMap, backwardHitAssociationMap);
+    this->MakeSecondaryAssociations(orderedSkipped, forwardHitAssociationMap, backwardHitAssociationMap);
+    HitJoinMap skipJoinMap;
+    this->IdentifyJoins(orderedSkipped, forwardHitAssociationMap, backwardHitAssociationMap, skipJoinMap);
+    this->CreateClusters(orderedSkipped, skipJoinMap, hitToClusterMap);
 
     return STATUS_CODE_SUCCESS;
 }
@@ -135,11 +152,29 @@ StatusCode TrackClusterCreationAlgorithm::AddFilteredCaloHits(
                 if (hitToClusterMap.end() != hitToClusterMap.find(pCaloHitI))
                     continue;
 
+                const LArCaloHit *const pLArCaloHitI{dynamic_cast<const LArCaloHit *const>(pCaloHitI)};
+		if (!pLArCaloHitI)
+		  continue;
+
+		//std::cout << pLArCaloHitI->GetLArTPCVolumeId() << " " << pLArCaloHitI->GetSubVolumeId() << std::endl;
+
                 const CaloHit *pClosestHit = NULL;
                 float closestSeparationSquared(m_minCaloHitSeparationSquared);
 
                 for (const CaloHit *const pCaloHitJ : clusteredHits)
                 {
+                    const LArCaloHit *const pLArCaloHitJ{dynamic_cast<const LArCaloHit *const>(pCaloHitJ)};
+		    if (!pLArCaloHitJ)
+                        continue;
+
+		    //std::cout << pLArCaloHitJ->GetLArTPCVolumeId() << " " << pLArCaloHitJ->GetSubVolumeId() << std::endl;
+
+                    if (m_checkInterTPCVolumeAssociations && !(pLArCaloHitI->GetLArTPCVolumeId() == pLArCaloHitJ->GetLArTPCVolumeId() &&
+							       pLArCaloHitI->GetSubVolumeId() == pLArCaloHitJ->GetSubVolumeId())) {
+		      //std::cout << "BH caught hits to skip due to volume checking during 'carryOn'" << std::endl;
+                        continue;
+		    }
+
                     if (pCaloHitI->GetMipEquivalentEnergy() > pCaloHitJ->GetMipEquivalentEnergy())
                         continue;
 
@@ -202,8 +237,22 @@ void TrackClusterCreationAlgorithm::MakePrimaryAssociations(const OrderedCaloHit
 
             for (const CaloHit *const pCaloHitI : caloHitsI)
             {
+                const LArCaloHit *const pLArCaloHitI{dynamic_cast<const LArCaloHit *const>(pCaloHitI)};
+		if (!pLArCaloHitI)
+                    continue;
                 for (const CaloHit *const pCaloHitJ : caloHitsJ)
-                    this->CreatePrimaryAssociation(pCaloHitI, pCaloHitJ, forwardHitAssociationMap, backwardHitAssociationMap);
+                {
+                    const LArCaloHit *const pLArCaloHitJ{dynamic_cast<const LArCaloHit *const>(pCaloHitJ)};
+		    if (!pLArCaloHitJ)
+                        continue;
+                    if (!m_checkInterTPCVolumeAssociations || (pLArCaloHitI->GetLArTPCVolumeId() == pLArCaloHitJ->GetLArTPCVolumeId() &&
+							       pLArCaloHitI->GetSubVolumeId() == pLArCaloHitJ->GetSubVolumeId()) )
+                    {
+                        this->CreatePrimaryAssociation(pCaloHitI, pCaloHitJ, forwardHitAssociationMap, backwardHitAssociationMap);
+                    } else {
+		      //std::cout << "BH caught hits to skip due to volume checking during MakePrimaryAssociations" << std::endl;
+		    }
+                }
             }
         }
     }
@@ -221,6 +270,9 @@ void TrackClusterCreationAlgorithm::MakeSecondaryAssociations(const OrderedCaloH
 
         for (const CaloHit *const pCaloHit : caloHits)
         {
+            const LArCaloHit *const pLArCaloHit{dynamic_cast<const LArCaloHit *const>(pCaloHit)};
+	    if (!pLArCaloHit)
+                continue;
             HitAssociationMap::const_iterator fwdIter = forwardHitAssociationMap.find(pCaloHit);
             const CaloHit *const pForwardHit((forwardHitAssociationMap.end() == fwdIter) ? NULL : fwdIter->second.GetPrimaryTarget());
 
@@ -228,7 +280,18 @@ void TrackClusterCreationAlgorithm::MakeSecondaryAssociations(const OrderedCaloH
             const CaloHit *const pForwardHitCheck((backwardHitAssociationMap.end() == fwdCheckIter) ? NULL : fwdCheckIter->second.GetPrimaryTarget());
 
             if ((NULL != pForwardHit) && (pForwardHitCheck != pCaloHit))
-                this->CreateSecondaryAssociation(pCaloHit, pForwardHit, forwardHitAssociationMap, backwardHitAssociationMap);
+            {
+                const LArCaloHit *const pLArForwardHit{dynamic_cast<const LArCaloHit *const>(pForwardHit)};
+		if (!pLArForwardHit)
+                    continue;
+                if (!m_checkInterTPCVolumeAssociations || (pLArCaloHit->GetLArTPCVolumeId() == pLArForwardHit->GetLArTPCVolumeId() &&
+							   pLArCaloHit->GetSubVolumeId() == pLArForwardHit->GetSubVolumeId()) )
+                {
+                    this->CreateSecondaryAssociation(pCaloHit, pForwardHit, forwardHitAssociationMap, backwardHitAssociationMap);
+                } else {
+		  //std::cout << "BH caught hits to skip due to volume checking during MakeSecondaryAssociations" << std::endl;
+		}
+            }
 
             HitAssociationMap::const_iterator bwdIter = backwardHitAssociationMap.find(pCaloHit);
             const CaloHit *const pBackwardHit((backwardHitAssociationMap.end() == bwdIter) ? NULL : bwdIter->second.GetPrimaryTarget());
@@ -237,7 +300,18 @@ void TrackClusterCreationAlgorithm::MakeSecondaryAssociations(const OrderedCaloH
             const CaloHit *const pBackwardHitCheck((forwardHitAssociationMap.end() == bwdCheckIter) ? NULL : bwdCheckIter->second.GetPrimaryTarget());
 
             if ((NULL != pBackwardHit) && (pBackwardHitCheck != pCaloHit))
-                this->CreateSecondaryAssociation(pBackwardHit, pCaloHit, forwardHitAssociationMap, backwardHitAssociationMap);
+            {
+                const LArCaloHit *const pLArBackwardHit{dynamic_cast<const LArCaloHit *const>(pBackwardHit)};
+		if (!pLArBackwardHit)
+                    continue;
+                if (!m_checkInterTPCVolumeAssociations || (pLArCaloHit->GetLArTPCVolumeId() == pLArBackwardHit->GetLArTPCVolumeId() &&
+							   pLArCaloHit->GetSubVolumeId() == pLArBackwardHit->GetSubVolumeId()) )
+                {
+                    this->CreateSecondaryAssociation(pBackwardHit, pCaloHit, forwardHitAssociationMap, backwardHitAssociationMap);
+                } else {
+		  //std::cout << "BH caught hits to skip due to volume checking during MakeSecondaryAssociations" << std::endl;
+		}
+            }
         }
     }
 }
@@ -323,6 +397,25 @@ void TrackClusterCreationAlgorithm::CreatePrimaryAssociation(const CaloHit *cons
     if (distanceSquared > m_maxCaloHitSeparationSquared)
         return;
 
+    // BH BH BH
+    /*
+    if ( m_checkInterTPCVolumeAssociations ) {
+      const LArCaloHit *const pLArCaloHitI{dynamic_cast<const LArCaloHit *const>(pCaloHitI)};
+      if (!pLArCaloHitI)
+	return;
+
+      const LArCaloHit *const pLArCaloHitJ{dynamic_cast<const LArCaloHit *const>(pCaloHitJ)};
+      if (!pLArCaloHitJ)
+	return;
+
+      if ( pLArCaloHitI->GetLArTPCVolumeId()!=pLArCaloHitJ->GetLArTPCVolumeId() || pLArCaloHitI->GetSubVolumeId()!=pLArCaloHitJ->GetSubVolumeId()) {
+	std::cout << "BH BH BH: Throwing out something in Primary Associations due to LArCaloHit Checks." << std::endl;
+	return;
+      }
+    }
+    */
+    // -- -- --
+
     HitAssociationMap::iterator forwardIter = forwardHitAssociationMap.find(pCaloHitI);
 
     if (forwardHitAssociationMap.end() == forwardIter)
@@ -351,6 +444,25 @@ void TrackClusterCreationAlgorithm::CreatePrimaryAssociation(const CaloHit *cons
 void TrackClusterCreationAlgorithm::CreateSecondaryAssociation(const CaloHit *const pCaloHitI, const CaloHit *const pCaloHitJ,
     HitAssociationMap &forwardHitAssociationMap, HitAssociationMap &backwardHitAssociationMap) const
 {
+    // BH BH BH
+    /*
+    if ( m_checkInterTPCVolumeAssociations ) {
+      const LArCaloHit *const pLArCaloHitI{dynamic_cast<const LArCaloHit *const>(pCaloHitI)};
+      if (!pLArCaloHitI)
+	return;
+
+      const LArCaloHit *const pLArCaloHitJ{dynamic_cast<const LArCaloHit *const>(pCaloHitJ)};
+      if (!pLArCaloHitJ)
+	return;
+
+      if ( pLArCaloHitI->GetLArTPCVolumeId()!=pLArCaloHitJ->GetLArTPCVolumeId() || pLArCaloHitI->GetSubVolumeId()!=pLArCaloHitJ->GetSubVolumeId()) {
+	std::cout<< "BH BH BH: Throwing out something in Primary Associations due to LArCaloHit Checks." << std::endl;
+	return;
+      }
+    }
+    */
+    // -- -- --
+
     HitAssociationMap::iterator forwardIter = forwardHitAssociationMap.find(pCaloHitI);
     HitAssociationMap::iterator backwardIter = backwardHitAssociationMap.find(pCaloHitJ);
 
@@ -384,25 +496,59 @@ void TrackClusterCreationAlgorithm::CreateSecondaryAssociation(const CaloHit *co
 const CaloHit *TrackClusterCreationAlgorithm::GetJoinHit(
     const CaloHit *const pCaloHit, const HitAssociationMap &hitAssociationMapI, const HitAssociationMap &hitAssociationMapJ) const
 {
+    const LArCaloHit *const pLArCaloHit{dynamic_cast<const LArCaloHit *const>(pCaloHit)};
+    if (!pLArCaloHit)
+        return nullptr;
+
     HitAssociationMap::const_iterator iterI = hitAssociationMapI.find(pCaloHit);
 
     if (hitAssociationMapI.end() == iterI)
-        return NULL;
+        return nullptr;
 
     const CaloHit *const pPrimaryTarget = iterI->second.GetPrimaryTarget();
     const CaloHit *const pSecondaryTarget = iterI->second.GetSecondaryTarget();
 
-    if (NULL == pSecondaryTarget)
-        return pPrimaryTarget;
+    const LArCaloHit *const pLArPrimaryTarget{dynamic_cast<const LArCaloHit *const>(pPrimaryTarget)};
+    if (!pLArPrimaryTarget)
+        return nullptr;
+
+    if (!pSecondaryTarget)
+    {
+        if (!m_checkInterTPCVolumeAssociations || (pLArCaloHit->GetLArTPCVolumeId() == pLArPrimaryTarget->GetLArTPCVolumeId() &&
+						   pLArCaloHit->GetSubVolumeId() == pLArPrimaryTarget->GetSubVolumeId()) )
+        {
+            return pPrimaryTarget;
+        }
+        else
+        {
+	  //std::cout << "BH caught hits to skip due to volume checking during GetJoinHit" << std::endl;
+            return nullptr;
+        }
+    }
 
     unsigned int primaryNSteps(0), secondaryNSteps(0);
     const CaloHit *const pPrimaryTrace = this->TraceHitAssociation(pPrimaryTarget, hitAssociationMapI, hitAssociationMapJ, primaryNSteps);
     const CaloHit *const pSecondaryTrace = this->TraceHitAssociation(pSecondaryTarget, hitAssociationMapI, hitAssociationMapJ, secondaryNSteps);
 
     if ((pPrimaryTrace == pSecondaryTrace) || (secondaryNSteps < 5))
-        return pPrimaryTarget;
+    {
+        const LArCaloHit *const pLArPrimaryTrace{dynamic_cast<const LArCaloHit *const>(pPrimaryTrace)};
+	if (!pLArPrimaryTrace)
+            return nullptr;
 
-    return NULL;
+        if (!m_checkInterTPCVolumeAssociations || ( pLArCaloHit->GetLArTPCVolumeId() == pLArPrimaryTrace->GetLArTPCVolumeId() &&
+						    pLArCaloHit->GetSubVolumeId() == pLArPrimaryTrace->GetSubVolumeId()) )
+        {
+            return pPrimaryTarget;
+        }
+        else
+        {
+	  //std::cout << "BH caught hits to skip due to volume checking during GetJoinHit" << std::endl;
+            return nullptr;
+        }
+    }
+
+    return nullptr;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -458,6 +604,9 @@ StatusCode TrackClusterCreationAlgorithm::ReadSettings(const TiXmlHandle xmlHand
     float closeSeparation = std::sqrt(m_closeSeparationSquared);
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "CloseSeparation", closeSeparation));
     m_closeSeparationSquared = closeSeparation * closeSeparation;
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,
+        XmlHelper::ReadValue(xmlHandle, "CheckInterTPCVolumeAssociations", m_checkInterTPCVolumeAssociations));
 
     return STATUS_CODE_SUCCESS;
 }

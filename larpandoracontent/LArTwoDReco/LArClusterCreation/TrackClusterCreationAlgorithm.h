@@ -203,6 +203,8 @@ private:
     float m_maxCaloHitSeparationSquared; ///< Square of maximum calo hit separation
     float m_minCaloHitSeparationSquared; ///< Square of minimum calo hit separation
     float m_closeSeparationSquared;      ///< Length scale (squared) for close hit separation
+
+    bool m_checkInterTPCVolumeAssociations; ///< Whether to check the TPC volume/subvolume IDs
 };
 
 //------------------------------------------------------------------------------------------------------------------------------------------

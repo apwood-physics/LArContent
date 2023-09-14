@@ -198,6 +198,7 @@
 
 #include "larpandoracontent/LArTwoDReco/TwoDParticleCreationAlgorithm.h"
 
+#include "larpandoracontent/LArUtility/DaughterVolumeCatalogAlgorithm.h"
 #include "larpandoracontent/LArUtility/ListChangingAlgorithm.h"
 #include "larpandoracontent/LArUtility/ListDeletionAlgorithm.h"
 #include "larpandoracontent/LArUtility/ListMergingAlgorithm.h"
@@ -210,10 +211,13 @@
 #include "larpandoracontent/LArVertex/MvaVertexSelectionAlgorithm.h"
 #include "larpandoracontent/LArVertex/VertexRefinementAlgorithm.h"
 
+#include "larpandoracontent/LArUtility/CheckClusterSubVolume.h"
+
 #include "larpandoracontent/LArContent.h"
 
 // clang-format off
 #define LAR_ALGORITHM_LIST(d)                                                                                                   \
+    d("LArCheckClusterSubVolume",               CheckClusterSubVolume)                                                          \
     d("LArMuonLeadingEventValidation",          MuonLeadingEventValidationAlgorithm)                                            \
     d("LArNeutrinoEventValidation",             NeutrinoEventValidationAlgorithm)                                               \
     d("LArTestBeamEventValidation",             TestBeamEventValidationAlgorithm)                                               \
@@ -314,6 +318,7 @@
     d("LArListChanging",                        ListChangingAlgorithm)                                                          \
     d("LArListDeletion",                        ListDeletionAlgorithm)                                                          \
     d("LArListMerging",                         ListMergingAlgorithm)                                                           \
+    d("LArDaughterVolumeCatalog",               DaughterVolumeCatalogAlgorithm)                                                 \
     d("LArPfoHitCleaning",                      PfoHitCleaningAlgorithm)                                                        \
     d("LArListPruning",                         ListPruningAlgorithm)                                                           \
     d("LArCandidateVertexCreation",             CandidateVertexCreationAlgorithm)                                               \

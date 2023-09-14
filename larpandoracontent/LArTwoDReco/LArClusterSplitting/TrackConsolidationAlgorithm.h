@@ -51,9 +51,21 @@ private:
     void GetReclusteredHits(const TwoDSlidingFitResult &slidingFitResult, const pandora::Cluster *const pTargetCluster,
         ClusterToHitMap &caloHitsToAdd, ClusterToHitMap &caloHitsToRemove) const;
 
+    /**
+     *  @brief Check cross TPC volume cluster associations to look for overlap in drift time (hits deposited in different volumes in
+     *  overlapping drift windows cannot be from the same trajectory) and remove impossible associations
+     *
+     *  @param pCluster1 The first cluster under consideration for merging
+     *  @param pCluster2 The second cluster under consideration for merging
+     *
+     *  @return true if the clusters are from a common volume, false otherwise
+     */
+    bool CheckInterTPCVolumeAssociations(const pandora::Cluster *const pCluster1, const pandora::Cluster *const pCluster2) const;
+
     float m_maxTransverseDisplacement; ///<
     float m_minAssociatedSpan;         ///<
     float m_minAssociatedFraction;     ///<
+    bool m_checkInterTPCVolumeAssociations; ///< Whether to check for mixing among tpc volumes
 };
 
 } // namespace lar_content

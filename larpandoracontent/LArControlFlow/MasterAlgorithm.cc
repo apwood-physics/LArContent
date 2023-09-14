@@ -154,6 +154,9 @@ StatusCode MasterAlgorithm::Run()
 {
     PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, this->Reset());
 
+    // BH BH BH
+    std::cout << "Using LAr Calo Hit VERSION " << m_larCaloHitVersion << std::endl;
+
     if (!m_workerInstancesInitialized)
         PANDORA_RETURN_RESULT_IF(STATUS_CODE_SUCCESS, !=, this->InitializeWorkerInstances());
 

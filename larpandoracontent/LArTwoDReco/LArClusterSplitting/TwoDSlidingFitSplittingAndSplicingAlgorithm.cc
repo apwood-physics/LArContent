@@ -11,6 +11,8 @@
 #include "larpandoracontent/LArHelpers/LArGeometryHelper.h"
 #include "larpandoracontent/LArHelpers/LArPointingClusterHelper.h"
 
+#include "larpandoracontent/LArObjects/LArCaloHit.h"
+
 #include "larpandoracontent/LArTwoDReco/LArClusterSplitting/TwoDSlidingFitSplittingAndSplicingAlgorithm.h"
 
 using namespace pandora;
@@ -23,7 +25,8 @@ TwoDSlidingFitSplittingAndSplicingAlgorithm::TwoDSlidingFitSplittingAndSplicingA
     m_longHalfWindowLayers(20),
     m_minClusterLength(7.5f),
     m_vetoDisplacement(1.5f),
-    m_runCosmicMode(false)
+    m_runCosmicMode(false),
+    m_checkInterTPCVolumeAssociations(false)
 {
 }
 
@@ -132,6 +135,25 @@ void TwoDSlidingFitSplittingAndSplicingAlgorithm::BuildClusterExtensionList(cons
             const Cluster *const pClusterJ = *iterJ;
 
             if (pClusterI == pClusterJ)
+                continue;
+
+            CaloHitList allHitsI;
+            pClusterI->GetOrderedCaloHitList().FillCaloHitList(allHitsI);
+            const LArCaloHit *const pLArCaloHitI{dynamic_cast<const LArCaloHit *const>(allHitsI.front())};
+            if (!pLArCaloHitI)
+                continue;
+            const unsigned int tpcVolumeI{pLArCaloHitI->GetLArTPCVolumeId()};
+            const unsigned int daughterVolumeI{pLArCaloHitI->GetDaughterVolumeId()};
+
+            CaloHitList allHitsJ;
+            pClusterJ->GetOrderedCaloHitList().FillCaloHitList(allHitsJ);
+            const LArCaloHit *const pLArCaloHitJ{dynamic_cast<const LArCaloHit *const>(allHitsJ.front())};
+            if (!pLArCaloHitJ)
+                continue;
+            const unsigned int tpcVolumeJ{pLArCaloHitJ->GetLArTPCVolumeId()};
+            const unsigned int daughterVolumeJ{pLArCaloHitJ->GetDaughterVolumeId()};
+
+            if (m_checkInterTPCVolumeAssociations && (tpcVolumeI != tpcVolumeJ || daughterVolumeI != daughterVolumeJ))
                 continue;
 
             // Get the branch and replacement sliding fits for this pair of clusters
@@ -434,6 +456,9 @@ StatusCode TwoDSlidingFitSplittingAndSplicingAlgorithm::ReadSettings(const TiXml
         STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "VetoDisplacement", m_vetoDisplacement));
 
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "CosmicMode", m_runCosmicMode));
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,
+        XmlHelper::ReadValue(xmlHandle, "CheckInterTPCVolumeAssociations", m_checkInterTPCVolumeAssociations));
 
     return STATUS_CODE_SUCCESS;
 }

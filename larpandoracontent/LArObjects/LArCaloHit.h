@@ -54,6 +54,13 @@ public:
     unsigned int GetLArTPCVolumeId() const;
 
     /**
+     *  @brief  Get the lar tpc sub volume id
+     *
+     *  @return the lar tpc sub volume id
+     */
+    unsigned int GetSubVolumeId() const;
+
+    /**
      *  @brief  Get the daughter volume id
      *
      *  @return the daughter volume id
@@ -97,6 +104,7 @@ public:
 
 private:
     unsigned int m_larTPCVolumeId;   ///< The lar tpc volume id
+    unsigned int m_subVolumeId;      ///< The sub volume id
     unsigned int m_daughterVolumeId; ///< The daughter volume id
     pandora::InputFloat m_pTrack;    ///< The probability that the hit is track-like
     pandora::InputFloat m_pShower;   ///< The probability that the hit is shower-like
@@ -158,8 +166,11 @@ private:
 inline LArCaloHit::LArCaloHit(const LArCaloHitParameters &parameters) :
     object_creation::CaloHit::Object(parameters),
     m_larTPCVolumeId(parameters.m_larTPCVolumeId.Get()),
+    m_subVolumeId(0),
     m_daughterVolumeId(parameters.m_daughterVolumeId.IsInitialized() ? parameters.m_daughterVolumeId.Get() : 0)
 {
+    // ATTN: Currently a DUNE FD HD hack
+    m_subVolumeId = m_daughterVolumeId % 2;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -167,6 +178,13 @@ inline LArCaloHit::LArCaloHit(const LArCaloHitParameters &parameters) :
 inline unsigned int LArCaloHit::GetLArTPCVolumeId() const
 {
     return m_larTPCVolumeId;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+
+inline unsigned int LArCaloHit::GetSubVolumeId() const
+{
+    return m_subVolumeId;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------

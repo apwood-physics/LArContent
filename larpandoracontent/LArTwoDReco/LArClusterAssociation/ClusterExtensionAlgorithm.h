@@ -20,7 +20,14 @@ namespace lar_content
  */
 class ClusterExtensionAlgorithm : public ClusterMergingAlgorithm
 {
+public:
+  /**                                                                                                                                                                                                     
+   *  @brief  Default constructor                                                                                                                                                                         
+   */
+  ClusterExtensionAlgorithm();
+
 protected:
+    virtual pandora::StatusCode ReadSettings(const pandora::TiXmlHandle xmlHandle);
     void PopulateClusterMergeMap(const pandora::ClusterVector &clusterVector, ClusterMergeMap &clusterMergeMatrix) const;
 
     /**
@@ -112,6 +119,17 @@ protected:
      *  @param  clusterMergeMap the map of cluster merges
      */
     virtual void FillClusterMergeMap(const ClusterAssociationMatrix &clusterAssociationMatrix, ClusterMergeMap &clusterMergeMap) const = 0;
+
+private:
+    /**
+     *  @brief Check cross TPC volume cluster associations to look for overlap in drift time (hits deposited in different volumes in
+     *  overlapping drift windows cannot be from the same trajectory) and remove impossible associations
+     *
+     *  @param clusterAssociationMatrix The input/output cluster association matrix
+     */
+    void CheckInterTPCVolumeAssociations(ClusterAssociationMatrix &clusterAssociationMatrix) const;
+
+    bool m_checkInterTPCVolumeAssociations; ///< Whether to check for mixing among tpc volumes
 };
 
 //------------------------------------------------------------------------------------------------------------------------------------------

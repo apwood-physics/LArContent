@@ -70,6 +70,8 @@ private:
     pandora::StatusCode ReadSettings(const pandora::TiXmlHandle xmlHandle);
 
     float m_clusteringWindowSquared; ///< Maximum distance (squared) for two hits to be joined
+
+    bool m_checkInterTPCVolumeAssociations; ///< Whether to check inter TPC volume associations
 };
 
 } // namespace lar_content

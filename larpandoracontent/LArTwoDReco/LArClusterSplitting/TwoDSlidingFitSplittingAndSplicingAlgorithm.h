@@ -181,11 +181,12 @@ private:
     pandora::StatusCode ReplaceBranch(const pandora::Cluster *const pBranchCluster, const pandora::Cluster *const pReplacementCluster,
         const pandora::CartesianVector &branchSplitPosition, const pandora::CartesianVector &branchSplitDirection) const;
 
-    unsigned int m_shortHalfWindowLayers; ///<
-    unsigned int m_longHalfWindowLayers;  ///<
-    float m_minClusterLength;             ///<
-    float m_vetoDisplacement;             ///<
-    bool m_runCosmicMode;                 ///<
+    unsigned int m_shortHalfWindowLayers;   ///<
+    unsigned int m_longHalfWindowLayers;    ///<
+    float m_minClusterLength;               ///<
+    float m_vetoDisplacement;               ///<
+    bool m_runCosmicMode;                   ///<
+    bool m_checkInterTPCVolumeAssociations; ///< Whether to check inter TPC volume associations
 };
 
 //------------------------------------------------------------------------------------------------------------------------------------------

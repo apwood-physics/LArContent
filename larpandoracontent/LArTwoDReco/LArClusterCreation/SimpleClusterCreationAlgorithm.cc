@@ -9,6 +9,7 @@
 #include "Pandora/AlgorithmHeaders.h"
 
 #include "larpandoracontent/LArHelpers/LArClusterHelper.h"
+#include "larpandoracontent/LArObjects/LArCaloHit.h"
 
 #include "larpandoracontent/LArTwoDReco/LArClusterCreation/SimpleClusterCreationAlgorithm.h"
 
@@ -17,7 +18,7 @@ using namespace pandora;
 namespace lar_content
 {
 
-SimpleClusterCreationAlgorithm::SimpleClusterCreationAlgorithm() : m_clusteringWindowSquared(1.f)
+SimpleClusterCreationAlgorithm::SimpleClusterCreationAlgorithm() : m_clusteringWindowSquared(1.f), m_checkInterTPCVolumeAssociations(false)
 {
 }
 
@@ -62,23 +63,37 @@ void SimpleClusterCreationAlgorithm::BuildAssociationMap(const CaloHitList &calo
 {
     for (const CaloHit *const pCaloHitI : caloHitList)
     {
+        const LArCaloHit *const pLArCaloHitI{dynamic_cast<const LArCaloHit *const>(pCaloHitI)};
+        if (!pLArCaloHitI)
+            continue;
+
         for (const CaloHit *const pCaloHitJ : caloHitList)
         {
             if (pCaloHitI == pCaloHitJ)
                 continue;
 
-            if ((pCaloHitI->GetPositionVector() - pCaloHitJ->GetPositionVector()).GetMagnitudeSquared() < m_clusteringWindowSquared)
+            const LArCaloHit *const pLArCaloHitJ{dynamic_cast<const LArCaloHit *const>(pCaloHitJ)};
+            if (!pLArCaloHitJ)
+                continue;
+
+            if (!m_checkInterTPCVolumeAssociations || (pLArCaloHitI->GetLArTPCVolumeId() == pLArCaloHitJ->GetLArTPCVolumeId() &&
+						       pLArCaloHitI->GetSubVolumeId() == pLArCaloHitJ->GetSubVolumeId()) )
             {
-                CaloHitList &caloHitListI(hitAssociationMap[pCaloHitI]);
+                if ((pCaloHitI->GetPositionVector() - pCaloHitJ->GetPositionVector()).GetMagnitudeSquared() < m_clusteringWindowSquared)
+                {
+                    CaloHitList &caloHitListI(hitAssociationMap[pCaloHitI]);
 
-                if (caloHitListI.end() == std::find(caloHitListI.begin(), caloHitListI.end(), pCaloHitJ))
-                    caloHitListI.push_back(pCaloHitJ);
+                    if (caloHitListI.end() == std::find(caloHitListI.begin(), caloHitListI.end(), pCaloHitJ))
+                        caloHitListI.push_back(pCaloHitJ);
 
-                CaloHitList &caloHitListJ(hitAssociationMap[pCaloHitI]);
+                    CaloHitList &caloHitListJ(hitAssociationMap[pCaloHitI]);
 
-                if (caloHitListJ.end() == std::find(caloHitListJ.begin(), caloHitListJ.end(), pCaloHitI))
-                    caloHitListJ.push_back(pCaloHitI);
-            }
+                    if (caloHitListJ.end() == std::find(caloHitListJ.begin(), caloHitListJ.end(), pCaloHitI))
+                        caloHitListJ.push_back(pCaloHitI);
+                }
+            } else {
+	      //std::cout << "BH -- skipping hit association due to inter tpc volume check in Simple Cluster Creation Algorithm" << std::endl;
+	    }
         }
     }
 }
@@ -148,6 +163,9 @@ StatusCode SimpleClusterCreationAlgorithm::ReadSettings(const TiXmlHandle xmlHan
     float clusteringWindow = std::sqrt(m_clusteringWindowSquared);
     PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=, XmlHelper::ReadValue(xmlHandle, "ClusteringWindow", clusteringWindow));
     m_clusteringWindowSquared = clusteringWindow * clusteringWindow;
+
+    PANDORA_RETURN_RESULT_IF_AND_IF(STATUS_CODE_SUCCESS, STATUS_CODE_NOT_FOUND, !=,
+	XmlHelper::ReadValue(xmlHandle, "CheckInterTPCVolumeAssociations", m_checkInterTPCVolumeAssociations));
 
     return STATUS_CODE_SUCCESS;
 }
