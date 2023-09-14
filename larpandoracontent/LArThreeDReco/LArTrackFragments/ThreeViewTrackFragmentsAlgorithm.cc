@@ -147,18 +147,71 @@ void ThreeViewTrackFragmentsAlgorithm::PerformMainLoop()
 
 void ThreeViewTrackFragmentsAlgorithm::CalculateOverlapResult(const Cluster *const pClusterU, const Cluster *const pClusterV, const Cluster *const pClusterW)
 {
-    const HitType missingHitType(((nullptr != pClusterU) && (nullptr != pClusterV) && (nullptr == pClusterW))
-                                     ? TPC_VIEW_W
-                                     : ((nullptr != pClusterU) && (nullptr == pClusterV) && (nullptr != pClusterW))
-                                           ? TPC_VIEW_V
-                                           : ((nullptr == pClusterU) && (nullptr != pClusterV) && (nullptr != pClusterW)) ? TPC_VIEW_U : HIT_CUSTOM);
+    const bool isMissingHitTypeU = (nullptr == pClusterU) && (nullptr != pClusterV) && (nullptr != pClusterW);
+    const bool isMissingHitTypeV = (nullptr != pClusterU) && (nullptr == pClusterV) && (nullptr != pClusterW);
+    const bool isMissingHitTypeW = (nullptr != pClusterU) && (nullptr != pClusterV) && (nullptr == pClusterW);
 
-    if (HIT_CUSTOM == missingHitType)
-        throw StatusCodeException(STATUS_CODE_INVALID_PARAMETER);
+    const HitType missingHitType = isMissingHitTypeU ? TPC_VIEW_U : isMissingHitTypeV ? TPC_VIEW_V : isMissingHitTypeW ? TPC_VIEW_W : HIT_CUSTOM;
 
-    // Calculate new overlap result and replace old overlap result where necessary
-    FragmentOverlapResult oldOverlapResult, newOverlapResult;
     const Cluster *pMatchedClusterU(nullptr), *pMatchedClusterV(nullptr), *pMatchedClusterW(nullptr);
+    const ClusterList &inputClusterList(this->GetInputClusterList(missingHitType));
+
+    ClusterList actualInputClusterList;
+
+    // Pare down input cluster list. Testing for now... If Missing view is W then only keep considering the W clusters in the same volume... (how to handle clusters spanning multiple volumes?)
+    switch (missingHitType) {
+        case TPC_VIEW_U:
+        case TPC_VIEW_V: {
+            for ( auto const& iCluster : inputClusterList ) {
+                actualInputClusterList.push_back( iCluster );
+            }
+            break;
+        }
+        case TPC_VIEW_W: {
+            CaloHitList caloHitList1, caloHitList2;
+            pClusterU->GetOrderedCaloHitList().FillCaloHitList(caloHitList1);
+            pClusterV->GetOrderedCaloHitList().FillCaloHitList(caloHitList2);
+
+            if (caloHitList1.empty() || caloHitList2.empty())
+              throw StatusCodeException(STATUS_CODE_INVALID_PARAMETER);
+
+            const LArCaloHit *const pLArCaloHit1{dynamic_cast<const LArCaloHit *const>(caloHitList1.front())};
+            const LArCaloHit *const pLArCaloHit2{dynamic_cast<const LArCaloHit *const>(caloHitList2.front())};
+
+            if (!pLArCaloHit1 || !pLArCaloHit2)
+              throw StatusCodeException(STATUS_CODE_INVALID_PARAMETER);
+
+            const unsigned int clusterTpcVolume1{pLArCaloHit1->GetLArTPCVolumeId()};
+            const unsigned int clusterSubVolume1{pLArCaloHit1->GetSubVolumeId()};
+
+            const unsigned int clusterTpcVolume2{pLArCaloHit2->GetLArTPCVolumeId()};
+            const unsigned int clusterSubVolume2{pLArCaloHit2->GetSubVolumeId()};
+
+            for ( auto const& iCluster : inputClusterList ) {
+              CaloHitList caloHitListOther;
+              iCluster->GetOrderedCaloHitList().FillCaloHitList(caloHitListOther);
+
+              if (caloHitListOther.empty())
+                continue;
+
+              const LArCaloHit *const pLArCaloHitOther{dynamic_cast<const LArCaloHit *const>(caloHitListOther.front())};
+
+              if (!pLArCaloHitOther)
+                continue;
+
+              const unsigned int clusterTpcVolumeOther{pLArCaloHitOther->GetLArTPCVolumeId()};
+              const unsigned int clusterSubVolumeOther{pLArCaloHitOther->GetSubVolumeId()};
+
+              if ( clusterTpcVolumeOther==clusterTpcVolume1 && clusterTpcVolumeOther==clusterTpcVolume2 &&
+                   clusterSubVolumeOther==clusterSubVolume1 && clusterSubVolumeOther==clusterSubVolume2 )
+                actualInputClusterList.push_back( iCluster );
+            }
+            break;
+        }
+        default:
+            throw StatusCodeException(STATUS_CODE_INVALID_PARAMETER);
+    }
+    // --------- (BH)
 
     const TwoDSlidingFitResult &fitResult1(
         (TPC_VIEW_U == missingHitType) ? this->GetCachedSlidingFitResult(pClusterV) : this->GetCachedSlidingFitResult(pClusterU));
@@ -168,56 +221,11 @@ void ThreeViewTrackFragmentsAlgorithm::CalculateOverlapResult(const Cluster *con
             ? this->GetCachedSlidingFitResult(pClusterW)
             : (TPC_VIEW_V == missingHitType) ? this->GetCachedSlidingFitResult(pClusterW) : this->GetCachedSlidingFitResult(pClusterV));
 
-    const ClusterList &inputClusterList(this->GetInputClusterList(missingHitType));
-    ClusterList actualInputClusterList;
-
-    // Pare down input cluster list. Testing for now... If Missing view is W then only keep considering the W clusters in the same volume... (how to handle clusters spanning multiple volumes?)
-    if ( TPC_VIEW_W == missingHitType ) {
-      CaloHitList caloHitList1;
-      if ( missingHitType == TPC_VIEW_U ) pClusterV->GetOrderedCaloHitList().FillCaloHitList(caloHitList1);
-      else                                pClusterU->GetOrderedCaloHitList().FillCaloHitList(caloHitList1);
-      if (caloHitList1.empty())
-        throw StatusCodeException(STATUS_CODE_INVALID_PARAMETER);
-      const LArCaloHit *const pLArCaloHit1{dynamic_cast<const LArCaloHit *const>(caloHitList1.front())};
-      if (!pLArCaloHit1)
-        throw StatusCodeException(STATUS_CODE_INVALID_PARAMETER);
-      const unsigned int clusterTpcVolume1{pLArCaloHit1->GetLArTPCVolumeId()};
-      const unsigned int clusterSubVolume1{pLArCaloHit1->GetSubVolumeId()};
-
-      CaloHitList caloHitList2;
-      if ( missingHitType == TPC_VIEW_W ) pClusterV->GetOrderedCaloHitList().FillCaloHitList(caloHitList2);
-      else                                pClusterW->GetOrderedCaloHitList().FillCaloHitList(caloHitList2);
-      if (caloHitList2.empty())
-        throw StatusCodeException(STATUS_CODE_INVALID_PARAMETER);
-      const LArCaloHit *const pLArCaloHit2{dynamic_cast<const LArCaloHit *const>(caloHitList2.front())};
-      if (!pLArCaloHit2)
-        throw StatusCodeException(STATUS_CODE_INVALID_PARAMETER);
-      const unsigned int clusterTpcVolume2{pLArCaloHit2->GetLArTPCVolumeId()};
-      const unsigned int clusterSubVolume2{pLArCaloHit2->GetSubVolumeId()};
-
-      for ( auto const iCluster : inputClusterList ) {
-	CaloHitList caloHitListOther;
-	iCluster->GetOrderedCaloHitList().FillCaloHitList(caloHitListOther);
-	if (caloHitListOther.empty())
-	  continue;
-	const LArCaloHit *const pLArCaloHitOther{dynamic_cast<const LArCaloHit *const>(caloHitListOther.front())};
-	if (!pLArCaloHitOther)
-	  continue;
-	const unsigned int clusterTpcVolumeOther{pLArCaloHitOther->GetLArTPCVolumeId()};
-	const unsigned int clusterSubVolumeOther{pLArCaloHitOther->GetSubVolumeId()};
-
-	if ( clusterTpcVolumeOther==clusterTpcVolume1 && clusterTpcVolumeOther==clusterTpcVolume2 &&
-	     clusterSubVolumeOther==clusterSubVolume1 && clusterSubVolumeOther==clusterSubVolume2 )
-	  actualInputClusterList.push_back( iCluster );
-      }
-    } else {
-      for ( auto const iCluster : inputClusterList ) {
-	actualInputClusterList.push_back( iCluster );
-      }
-    }
-    // --------- (BH)
-
     const Cluster *pBestMatchedCluster(nullptr);
+
+    // Calculate new overlap result and replace old overlap result where necessary
+    FragmentOverlapResult oldOverlapResult, newOverlapResult;
+
     const StatusCode statusCode(this->CalculateOverlapResult(fitResult1, fitResult2, actualInputClusterList, pBestMatchedCluster, newOverlapResult));
 
     if ((STATUS_CODE_SUCCESS != statusCode) && (STATUS_CODE_NOT_FOUND != statusCode))
