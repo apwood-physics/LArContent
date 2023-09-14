@@ -52,8 +52,9 @@ void ThreeViewTrackFragmentsAlgorithm::UpdateForNewCluster(const Cluster *const 
 
     // ATTN This is non-standard usage, supported here only (for legacy purposes)
     MatchingType &matchingControl(this->GetMatchingControl());
-    ClusterList &clusterList((TPC_VIEW_U == hitType) ? matchingControl.m_clusterListU
-                                                     : (TPC_VIEW_V == hitType) ? matchingControl.m_clusterListV : matchingControl.m_clusterListW);
+    ClusterList &clusterList((TPC_VIEW_U == hitType)   ? matchingControl.m_clusterListU
+                             : (TPC_VIEW_V == hitType) ? matchingControl.m_clusterListV
+                                                       : matchingControl.m_clusterListW);
 
     if (clusterList.end() != std::find(clusterList.begin(), clusterList.end(), pNewCluster))
         throw StatusCodeException(STATUS_CODE_ALREADY_PRESENT);
@@ -151,7 +152,10 @@ void ThreeViewTrackFragmentsAlgorithm::CalculateOverlapResult(const Cluster *con
     const bool isMissingHitTypeV = (nullptr != pClusterU) && (nullptr == pClusterV) && (nullptr != pClusterW);
     const bool isMissingHitTypeW = (nullptr != pClusterU) && (nullptr != pClusterV) && (nullptr == pClusterW);
 
-    const HitType missingHitType = isMissingHitTypeU ? TPC_VIEW_U : isMissingHitTypeV ? TPC_VIEW_V : isMissingHitTypeW ? TPC_VIEW_W : HIT_CUSTOM;
+    const HitType missingHitType = isMissingHitTypeU   ? TPC_VIEW_U
+                                   : isMissingHitTypeV ? TPC_VIEW_V
+                                   : isMissingHitTypeW ? TPC_VIEW_W
+                                                       : HIT_CUSTOM;
 
     const Cluster *pMatchedClusterU(nullptr), *pMatchedClusterV(nullptr), *pMatchedClusterW(nullptr);
     const ClusterList &inputClusterList(this->GetInputClusterList(missingHitType));
@@ -159,27 +163,31 @@ void ThreeViewTrackFragmentsAlgorithm::CalculateOverlapResult(const Cluster *con
     ClusterList actualInputClusterList;
 
     // Pare down input cluster list. Testing for now... If Missing view is W then only keep considering the W clusters in the same volume... (how to handle clusters spanning multiple volumes?)
-    switch (missingHitType) {
+    switch (missingHitType)
+    {
         case TPC_VIEW_U:
-        case TPC_VIEW_V: {
-            for ( auto const& iCluster : inputClusterList ) {
-                actualInputClusterList.push_back( iCluster );
+        case TPC_VIEW_V:
+        {
+            for (auto const &iCluster : inputClusterList)
+            {
+                actualInputClusterList.push_back(iCluster);
             }
             break;
         }
-        case TPC_VIEW_W: {
+        case TPC_VIEW_W:
+        {
             CaloHitList caloHitList1, caloHitList2;
             pClusterU->GetOrderedCaloHitList().FillCaloHitList(caloHitList1);
             pClusterV->GetOrderedCaloHitList().FillCaloHitList(caloHitList2);
 
             if (caloHitList1.empty() || caloHitList2.empty())
-              throw StatusCodeException(STATUS_CODE_INVALID_PARAMETER);
+                throw StatusCodeException(STATUS_CODE_INVALID_PARAMETER);
 
             const LArCaloHit *const pLArCaloHit1{dynamic_cast<const LArCaloHit *const>(caloHitList1.front())};
             const LArCaloHit *const pLArCaloHit2{dynamic_cast<const LArCaloHit *const>(caloHitList2.front())};
 
             if (!pLArCaloHit1 || !pLArCaloHit2)
-              throw StatusCodeException(STATUS_CODE_INVALID_PARAMETER);
+                throw StatusCodeException(STATUS_CODE_INVALID_PARAMETER);
 
             const unsigned int clusterTpcVolume1{pLArCaloHit1->GetLArTPCVolumeId()};
             const unsigned int clusterSubVolume1{pLArCaloHit1->GetSubVolumeId()};
@@ -187,24 +195,25 @@ void ThreeViewTrackFragmentsAlgorithm::CalculateOverlapResult(const Cluster *con
             const unsigned int clusterTpcVolume2{pLArCaloHit2->GetLArTPCVolumeId()};
             const unsigned int clusterSubVolume2{pLArCaloHit2->GetSubVolumeId()};
 
-            for ( auto const& iCluster : inputClusterList ) {
-              CaloHitList caloHitListOther;
-              iCluster->GetOrderedCaloHitList().FillCaloHitList(caloHitListOther);
+            for (auto const &iCluster : inputClusterList)
+            {
+                CaloHitList caloHitListOther;
+                iCluster->GetOrderedCaloHitList().FillCaloHitList(caloHitListOther);
 
-              if (caloHitListOther.empty())
-                continue;
+                if (caloHitListOther.empty())
+                    continue;
 
-              const LArCaloHit *const pLArCaloHitOther{dynamic_cast<const LArCaloHit *const>(caloHitListOther.front())};
+                const LArCaloHit *const pLArCaloHitOther{dynamic_cast<const LArCaloHit *const>(caloHitListOther.front())};
 
-              if (!pLArCaloHitOther)
-                continue;
+                if (!pLArCaloHitOther)
+                    continue;
 
-              const unsigned int clusterTpcVolumeOther{pLArCaloHitOther->GetLArTPCVolumeId()};
-              const unsigned int clusterSubVolumeOther{pLArCaloHitOther->GetSubVolumeId()};
+                const unsigned int clusterTpcVolumeOther{pLArCaloHitOther->GetLArTPCVolumeId()};
+                const unsigned int clusterSubVolumeOther{pLArCaloHitOther->GetSubVolumeId()};
 
-              if ( clusterTpcVolumeOther==clusterTpcVolume1 && clusterTpcVolumeOther==clusterTpcVolume2 &&
-                   clusterSubVolumeOther==clusterSubVolume1 && clusterSubVolumeOther==clusterSubVolume2 )
-                actualInputClusterList.push_back( iCluster );
+                if (clusterTpcVolumeOther == clusterTpcVolume1 && clusterTpcVolumeOther == clusterTpcVolume2 &&
+                    clusterSubVolumeOther == clusterSubVolume1 && clusterSubVolumeOther == clusterSubVolume2)
+                    actualInputClusterList.push_back(iCluster);
             }
             break;
         }
@@ -216,10 +225,9 @@ void ThreeViewTrackFragmentsAlgorithm::CalculateOverlapResult(const Cluster *con
     const TwoDSlidingFitResult &fitResult1(
         (TPC_VIEW_U == missingHitType) ? this->GetCachedSlidingFitResult(pClusterV) : this->GetCachedSlidingFitResult(pClusterU));
 
-    const TwoDSlidingFitResult &fitResult2(
-        (TPC_VIEW_U == missingHitType)
-            ? this->GetCachedSlidingFitResult(pClusterW)
-            : (TPC_VIEW_V == missingHitType) ? this->GetCachedSlidingFitResult(pClusterW) : this->GetCachedSlidingFitResult(pClusterV));
+    const TwoDSlidingFitResult &fitResult2((TPC_VIEW_U == missingHitType)   ? this->GetCachedSlidingFitResult(pClusterW)
+                                           : (TPC_VIEW_V == missingHitType) ? this->GetCachedSlidingFitResult(pClusterW)
+                                                                            : this->GetCachedSlidingFitResult(pClusterV));
 
     const Cluster *pBestMatchedCluster(nullptr);
 
@@ -335,11 +343,10 @@ StatusCode ThreeViewTrackFragmentsAlgorithm::GetProjectedPositions(
     // Check hit types
     const HitType hitType1(LArClusterHelper::GetClusterHitType(pCluster1));
     const HitType hitType2(LArClusterHelper::GetClusterHitType(pCluster2));
-    const HitType hitType3((TPC_VIEW_U != hitType1 && TPC_VIEW_U != hitType2)
-                               ? TPC_VIEW_U
-                               : (TPC_VIEW_V != hitType1 && TPC_VIEW_V != hitType2)
-                                     ? TPC_VIEW_V
-                                     : (TPC_VIEW_W != hitType1 && TPC_VIEW_W != hitType2) ? TPC_VIEW_W : HIT_CUSTOM);
+    const HitType hitType3((TPC_VIEW_U != hitType1 && TPC_VIEW_U != hitType2)   ? TPC_VIEW_U
+                           : (TPC_VIEW_V != hitType1 && TPC_VIEW_V != hitType2) ? TPC_VIEW_V
+                           : (TPC_VIEW_W != hitType1 && TPC_VIEW_W != hitType2) ? TPC_VIEW_W
+                                                                                : HIT_CUSTOM);
 
     if (HIT_CUSTOM == hitType3)
         return STATUS_CODE_INVALID_PARAMETER;
